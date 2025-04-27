@@ -1,25 +1,82 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { assemble6502 } from './assembler';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	// Befehl "6502: Assemble Current File"
+	const assembleCommand = vscode.commands.registerCommand('cpu6502.assemble6502', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (editor) {
+			const source = editor.document.getText();
+			const bin = assemble6502(source);
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "cpu6502" is now active!');
+			// Erstelle eine temporäre Datei im Arbeitsbereich
+			const folderUri = vscode.workspace.workspaceFolders?.[0].uri;
+			if (!folderUri) {
+				vscode.window.showErrorMessage("Kein Arbeitsbereich geöffnet.");
+				return;
+			}
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('cpu6502.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from cpu6502!');
+			const fileUri = vscode.Uri.joinPath(folderUri, 'assembled_output.bin');
+
+			// Schreibe den Bytecode in die Datei
+			try {
+				await vscode.workspace.fs.writeFile(fileUri, Buffer.from(bin));
+				vscode.window.showInformationMessage(`Assembled ${bin.length} bytes und gespeichert unter: ${fileUri.fsPath}`);
+			} catch (error) {
+				console.error(`Fehler beim Speichern der Datei: ${error}`);
+			}
+		}
 	});
+	context.subscriptions.push(assembleCommand);
 
-	context.subscriptions.push(disposable);
+	const completionProvider = vscode.languages.registerCompletionItemProvider(
+		'6502', // Sprach-ID aus package.json
+		{
+			provideCompletionItems(document, position) {
+				const line = document.lineAt(position); // Aktuelle Zeile
+				const currentText = line.text.substring(0, position.character); // Bis zum Cursor
+
+				// Vervollständigung der bekannten Befehle
+				const instructions = [
+					'LDA', 'LDX', 'LDY', 'STA', 'STX', 'STY', 'ADC', 'SBC',
+					'INX', 'INY', 'DEX', 'DEY', 'JMP', 'JSR', 'RTS', 'BRK',
+					'BNE', 'BEQ', 'BPL', 'BMI', 'BCC', 'BCS', 'BVC', 'BVS',
+					'CMP', 'CPX', 'CPY', 'INC', 'DEC', 'AND', 'ORA', 'EOR',
+					'TAX', 'TAY', 'TXA', 'TYA', 'TSX', 'TXS', 'PHA', 'PHP',
+					'PLA', 'PLP', 'CLC', 'SEC', 'CLI', 'SEI', 'CLV', 'CLD',
+					'SED', 'NOP', 'BIT', 'ROL', 'ROR', 'ASL', 'LSR'
+				];
+
+				// Vorschläge für Befehle
+				const commandSuggestions = instructions.map(instr => {
+					const item = new vscode.CompletionItem(instr, vscode.CompletionItemKind.Keyword);
+					item.insertText = instr;
+					return item;
+				});
+
+				// Labels erkennen: Alle Label-Deklarationen suchen
+				const labelSuggestions: vscode.CompletionItem[] = [];
+				const labelRegex = /^[ \t]*([A-Za-z_][\w]*):/;  // Regulärer Ausdruck für Labels
+
+				for (let i = 0; i < document.lineCount; i++) {
+					const lineText = document.lineAt(i).text;
+					const match = lineText.match(labelRegex);
+					if (match) {
+						const label = match[1]; // Erster Capturing-Gruppe (Labelname)
+						const labelItem = new vscode.CompletionItem(label, vscode.CompletionItemKind.Variable);
+						labelItem.insertText = label + ':'; // Label mit ':' einfügen
+						labelSuggestions.push(labelItem);
+					}
+				}
+
+				// Zusammenführen von Befehlen und Labels
+				return [...commandSuggestions, ...labelSuggestions];
+			}
+		},
+		':' // Trigger nach ":" (also bei Labelverwendung)
+	);
+	context.subscriptions.push(completionProvider);
+
 }
 
 // This method is called when your extension is deactivated

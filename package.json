@@ -14,10 +14,31 @@
   "contributes": {
     "commands": [
       {
-        "command": "cpu6502.helloWorld",
-        "title": "Hello World"
+        "command": "cpu6502.assemble6502",
+        "title": "CPU 6502: Assemble Current File"
+      }
+    ],
+    "languages": [
+      {
+        "id": "6502asm",
+        "aliases": [
+          "6502 Assembly",
+          "asm"
+        ],
+        "extensions": [
+          ".asm", ".a65"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "6502asm",
+        "scopeName": "cpu6502.6502",
+        "path": "./syntaxes/6502.tmLanguage.json"
       }
     ]
+
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
